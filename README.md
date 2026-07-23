@@ -6,37 +6,37 @@ This Github repository contains code for the numerical experiments in the follow
 
 ## Background
 
-In the Bayseian inference approach (for linear models), model parameters $\mathbf{p} \in ℝ^d$ are related to measurement data $\mathbf{m} \in ℝ^{d_\text{obs}}$ through the following observation model:
+In the Bayseian inference approach (for linear models), model parameters $p \in ℝ^d$ are related to measurement data $m \in ℝ^{d_\text{obs}}$ through the following observation model:
 
 $$
 \begin{equation}
-\mathbf{m} = \mathbf{G} \mathbf{p} + \boldsymbol{\epsilon}.
+\mathbf{m} = G p + \epsilon.
 \end{equation}
 $$
 
-where $G \in ℝ^{d_\text{obs} \times d}$ is the forward model and $\boldsymbol{\epsilon} \in ℝ^{d_\text{obs}}$ is observation noise.
+where $G \in ℝ^{d_\text{obs} \times d}$ is the forward model and $\epsilon \in ℝ^{d_\text{obs}}$ is observation noise.
 
-These numerical experiments consider the Bayesian inference setting where we assume the observation noise is Gaussian, i.e., $\boldsymbol{\epsilon} \sim 𝒩(\mathbf{0}, \mathbf{\Gamma_\text{obs}})$, and we are given a Gaussian prior on the model parameter, i.e., $\mathbf{p} \sim 𝒩(\mathbf{0}, \Gamma_0)$. 
+These numerical experiments consider the Bayesian inference setting where we assume the observation noise is Gaussian, i.e., $\epsilon \sim 𝒩(0, \Gamma_\text{obs})$, and we are given a Gaussian prior on the model parameter, i.e., $p \sim 𝒩(0, \Gamma_0)$. 
 
-We are interested in the setting where measurements come from a linear dynamical system. Let $\mathbf{A} \in ℝ^{d \times d}$ and $\mathbf{C} \in ℝ^{d_\text{out} \times d}$ be the state and output matrix respectively. The goal is to infer the unknown initial condition as model parameter $\mathbf{p}$:
+We are interested in the setting where measurements come from a linear dynamical system. Let $A \in ℝ^{d \times d}$ and $C \in ℝ^{d_\text{out} \times d}$ be the state and output matrix respectively. The goal is to infer the unknown initial condition as model parameter $p$:
 
 $$
 \begin{aligned}
-&\dot{\mathbf{x}}(t) = \mathbf{A}\mathbf{x}(t), \qquad & \mathbf{x}(0) = \mathbf{p}, \\
-&\mathbf{y}(t) = \mathbf{C}\mathbf{x}(t).
+&\dot{x}(t) = Ax(t), \qquad & x(0) = p, \\
+&y(t) = Cx(t).
 \end{aligned}
 $$
 
 Our $n$ measurement snapshots are defined at times $0 < t_1 < \dots < t_n$ such that:
 
 $$
-\mathbf{m}_i = \mathbf{y}(t_i) + \epsilon_i \quad \text{for} \quad i = 1, \dots, n
+m_i = y(t_i) + \epsilon_i \quad \text{for} \quad i = 1, \dots, n
 $$
 
-where $\epsilon_i \sim 𝒩(\mathbf{0}, \mathbf{\Gamma_\epsilon})$. The measurement vector $\mathbf{m}$ is constructed as follows:
+where $\epsilon_i \sim 𝒩(0, \Gamma_\epsilon)$. The measurement vector $m$ is constructed as follows:
 
 $$
-\mathbf{m} = \begin{bmatrix} m_1\\ 
+m = \begin{bmatrix} m_1\\ 
 \vdots \\
 m_n \end{bmatrix} \in ℝ^{d_\text{obs}}
 $$
@@ -46,13 +46,15 @@ such that $d_\text{obs} = n d_\text{out}$.
 Using knowledge of the linear dynamical system, we can construct the forward operator and observation covariance:
 
 $$
-\mathbf{G} = \begin{bmatrix} \mathbf{C}e^{\mathbf{A}t_1}\\ 
+G = \begin{bmatrix} Ce^{A t_1}\\ 
 \vdots \\
-\mathbf{C}e^{\mathbf{A}t_n}
+Ce^{A t_n}
 \end{bmatrix} \in ℝ^{d_\text{obs} \times d}  \quad \text{and} \quad
-\mathbf{\Gamma_\text{obs}} = \begin{bmatrix} \Gamma_\epsilon & & \\
-& &\ddots & \\
-& & & \Gamma_\epsilon \end{bmatrix} \in ℝ^{d_\text{obs} \times d_\text{obs}}.
+\Gamma_\text{obs} = \begin{bmatrix} 
+\Gamma_\epsilon   &          &                   \\
+                  &   \ddots &                   \\
+                  &          &   \Gamma_\epsilon 
+\end{bmatrix} \in ℝ^{d_\text{obs} \times d_\text{obs}}.
 $$
 
 Using Bayes' rule, we obtain the posterior $p | m \sim 𝒩(\mu_\text{pos}, \Gamma_\text{pos})$:
@@ -61,15 +63,15 @@ $$
 \mu_\text{pos} = \Gamma_\text{pos} G^\top \Gamma^{-1}_\text{obs} m \in ℝ^d \quad \text{and} \quad \Gamma_\text{pos} = \Gamma_0 - \Gamma_0 G^\top (\Gamma_\text{obs} + G \Gamma_0 G^\top)^{-1} G \Gamma_0 \in ℝ^{d \times d}.
 $$
 
-**Issue:** The forward model $G$ is high-dimensional and can be expensive to evaluate; thus, we harness system-theoretic model reduction to allievate the computational burden of obtaining posterior quantities.
+**Limitation:** The forward model $G$ is high-dimensional and can be expensive to evaluate; thus, we harness system-theoretic model reduction to allievate the computational burden of obtaining posterior quantities.
 
 ## Prior-Driven System
 The work in [2] introduces the prior-driven system which allows for the system-theoretic model reduction to be performed on the linear dynamical system of interest. Let $\Gamma_0 = L_0 L_0^\top$ and we can reinterpret the initial condition as a impulse input $u(t) = \delta(t)$ to the following prior-driven system:
 
 $$
 \begin{aligned}
-&\dot{\mathbf{x}}(t) = \mathbf{A}\mathbf{x}(t) + L_0 u(t), \qquad & \mathbf{x}(0) = 0, \\
-&\mathbf{y}_\epsilon(t) = \Gamma^{-1/2}_\epsilon\mathbf{C}\mathbf{x}(t).
+&\dot{x}(t) = Ax(t) + L_0 u(t), \qquad & x(0) = 0, \\
+&y_\epsilon(t) = \Gamma^{-1/2}_\epsilon C x(t).
 \end{aligned}
 $$
 
@@ -77,7 +79,7 @@ $$
 In this repository, we estimate posterior quantities using prior-driven balanced truncation [2] and prior-driven partial realization [1]. The work in [3] shows that the posterior estimation error can be attributed to how well the reduced order model estimates the impulse response of the prior-driven system. 
 
 $$
-\text{Impulse Response: } \quad h(t) = \Gamma^{-1/2}_\epsilon\mathbf{C}e^{At} L_0
+\text{Impulse Response: } \quad h(t) = \Gamma^{-1/2}_\epsilon Ce^{A t} L_0
 $$
 
 These prior-driven model reduction methods can be briefly described as applying balanced truncation [4, page 211] and partial realization [4, page 346] to the prior-driven system [2] for posterior estimation.
@@ -121,4 +123,4 @@ The script `ex_pdpr.m` generators plots and numerical results for [benchmark mod
 
 ### Acknowledgements
 
-This project was funded as [DAAD RISE Germany](https://www.daad.de/rise/en/rise-germany/) program internship, supervised by Josie König at the University of Potsdam ٩(^ᗜ^ )و.
+This project was funded as a [DAAD RISE Germany](https://www.daad.de/rise/en/rise-germany/) program internship, supervised by Josie König at the University of Potsdam ٩(^ᗜ^ )و.
