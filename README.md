@@ -86,6 +86,8 @@ These prior-driven model reduction methods can be briefly described as applying 
 
 ## Examples
 
+To run this code, you need the MATLAB Control System Toolbox. The code was tested on a machine equipped with 16 GB of unified memory and an Apple M5 chip. Computations were performed in MATLAB Version 26.1.0.3203278 (R2026a) running on macOS Tahoe 26.5, using Control System Toolbox Version 26.1 (R2026a).
+
 ### 1D Advection Diffusion Equation
 The script `advec_diff_pdpr.m` generates plots and numerical results for the 1D advection-diffusion partial differential equation (PDE) example. Changing the parameters $a$ and $c$ in the following PDE allows for experimentation with different Hankel singular value decays.
 
@@ -110,6 +112,8 @@ The script `ex_pdpr.m` generators plots and numerical results for [benchmark mod
 - Clamped Beam Model
 - Building Model
 - ISS 1R Model
+
+The `.mat` files from [SLICOT](https://www.slicot.org/20-site/126-benchmark-examples-for-model-reduction) [5] are in the `models` folder.
 
 ## References 
 
