@@ -1,10 +1,17 @@
+% This is a script to create plots for multiple SLICOT model reduction
+% benchmark examples for posterior estimation
+%
+% Copyright (c) 2026, Vivian Zhang
+% All rights reserved.
+% License: BSD 3-Clause License (see LICENSE)
+%
+
 clear; close all
 rng(1, "twister")
 addpath("functions")
 
 %% Experimental Parameters
-
-example_name = 'buil'; % Example
+example_name = 'build'; % Example
 
 reps = 500;  % number of initial conditions drawn for posterior estimation
 scale = false; % creates an artificial system such that system poles are in left unit circle
@@ -17,7 +24,7 @@ disp("dt = " + dt)
 disp("T_end = " + T_end)
 
 % Loading Examples
-if example_name == 'heat'
+if strcmp(example_name, 'heat')
     load('models/heat-cont.mat');
     spat_dim = 50;
     A = full(A(1:spat_dim, 1:spat_dim));
@@ -32,7 +39,7 @@ if example_name == 'heat'
     
     r_max = 30;
     r_vals = 1:r_max;
-elseif example_name == 'beam'
+elseif strcmp(example_name, 'beam')
     load('models/beam.mat')
     A = full(A);
     B = full(B);
@@ -44,7 +51,7 @@ elseif example_name == 'beam'
 
     r_max = 80;
     r_vals = 1:r_max;
-elseif example_name == 'buil'
+elseif strcmp(example_name, 'build')
     load('models/build.mat')
     A = full(A);
     B = full(B);
@@ -56,7 +63,7 @@ elseif example_name == 'buil'
 
     r_max = 48;
     r_vals = 1:r_max;
-elseif example_name == 'isss'
+elseif strcmp(example_name, 'iss')
     load('models/iss.mat');
     A = full(A);
     B = full(B);
@@ -69,7 +76,6 @@ elseif example_name == 'isss'
     r_max = 225;
     r_vals = 1:r_max;
 end
-N = r_max*3;
 
 %% Scaling 
 if scale == true

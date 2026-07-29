@@ -160,7 +160,7 @@ for n = 1:n_max
 
     % Step 6a: compute delta_n
     delta = W(:, n)'*V(:, n); 
-    disp("delta = " + num2str(delta))
+    % disp("delta = " + num2str(delta))
 
     % Step 6b: look-ahead needed to continue algorithm
     if norm(delta) < 1e-16

@@ -1,43 +1,62 @@
+% This is a script to create plots for PD-PR for the 1D advection-diffusion PDE
+% example.
+% 
+% Copyright (c) 2026, Vivian Zhang
+% All rights reserved.
+% License: BSD 3-Clause License (see LICENSE)
+%
+
 clear; close all
 rng(1, "twister")
 addpath("functions")
 
-%% Experimental Parameters
+%% Example Set-up
+% set scale = 0 if no scaling
+scale = 1; % creates an artificial scaled system with largest eigenvalue modulus == scale
+T_end = 1; % ending times [1, 10, 50]
 
-reps = 500;  % number of initial conditions drawn for posterior estimation
-scale = true; % creates an artificial system such that system poles are in left unit circle
+% Tested Reduced Dimensions
+r_max = 20; % maximum dimension
 
-% Time Scale
-T_end = 10; % ending time
-dt = 0.5; % timestep
-
-% Full model variables
+% Full model Set-Up
 d = 128; % spatial dimension
-a = 0.1; % diffusion
-c = 0.1; % advection
+a = 1; % diffusion
+c = [1, 100, 10000]; % advection
 
-% Parameters
-[A, C] = get_matrices(d, a, c);
-Gamma_ep = 0.15^2;
-d_out = size(C, 1);
-r_max = 20;
+% Experiment Set up
+n = 10; % number of timesteps
+dt = T_end./n; % timestep size
 r_vals = 1:r_max;
+reps = 500;  % number of initial conditions drawn for posterior estimation
 
-n = floor(T_end/dt); % number of timesteps
+%% Initializing
+HSV = zeros(length(c), d);
+
+mu_errs_BT_hsv = zeros(length(c), length(r_vals));
+mu_errs_PR_hsv = zeros(length(c), length(r_vals));
+
+Gamma_errs_BT_hsv = zeros(length(c), length(r_vals));
+Gamma_errs_PR_hsv = zeros(length(c), length(r_vals));
+
+for i = 1:length(c)
+[A, C] = get_matrices(d, a, c(i)); % state matrix and output matrix
+Gamma_ep = 0.15^2; % noise covariance
+d_out = size(C, 1); % output dimension
+
 disp("dt = " + dt)
 disp("T_end = " + T_end)
-disp("max eig" + max(abs(eig(A))))
+disp("max eig = " + max(abs(eig(A))))
 
-%% Scaling 
-if scale == true
-    alpha = max(abs(eig(A))) + 1e-5;
-    A = A./alpha;
-    % B = full(B)./sqrt(alpha);
-    C = full(C)./sqrt(alpha);
+%% Scaling: creates an artificial system such that system poles are in left unit circle
+if scale ~= 0
+    alpha = max(abs(eig(A))) + 1e-3;
+    A = A./alpha * scale;
+    C = full(C)./sqrt(alpha) * scale;
 end
+disp("new max eig = " + max(abs(eig(A))))
 
-
-%% given full low-rank prior - sample covariance of compatible covariance
+%% Obtaining prior
+% given full low-rank prior - sample covariance of compatible covariance
 ensemble_size       = 200; % size of prior ensemble
 Lyap_solution       = lyapchol(A, eye(d))'; % compatibility Lyapunov eq.
 ensemble            = Lyap_solution * randn(d, ensemble_size); 
@@ -53,7 +72,7 @@ L_pr           = Xs(:, 1:prior_rank) ...
 disp("Columns of L_pr: " + size(L_pr, 2))
 disp("Rank of Gamma_pr: " + rank(Gamma_pr))
 
-%%
+%% Full model and Measurements 
 G = get_forward_model(A, C, dt, n);
 p = L_pr * randn(size(L_pr, 2), reps);
 Gamma_obs = kron(eye(n), Gamma_ep);
@@ -63,15 +82,7 @@ epsilon = reshape(epsilon, [d_out*n, reps]);
 y = G * p;
 m = y + epsilon;
 
-%% Visualizing PDE
-plot_field(A, p(:, 1))
-
-%% Full Prior-Driven Model
-% Markov Parameters
-N = 3*r_max;
-H = markov_parameters(N, A, L_pr, Gamma_ep^(-1/2)*C);
-
-% compute true posterior
+%% compute true posterior
 [mu_pos, Gamma_pos] = compute_posterior(Gamma_pr, G, Gamma_obs, m);
 
 %% Prior-Driven Balanced Truncation
@@ -86,16 +97,13 @@ D_sqrtinv = diag(sqrt(1 ./ diag(D_bt)));
 T = Rp*Z(:, 1:size(D_sqrtinv, 1))*D_sqrtinv;
 S = Lq*U(:, 1:size(D_sqrtinv, 1))*D_sqrtinv;
 
+ds = diag(D_bt);
+HSV(i, :) = ds./sum(ds);
+
 %% Prior-Driven Partial Realization
 [V, W] = block_lanczos(A, L_pr, (Gamma_ep^(-1/2)*C)', r_max);
 
 %% Getting Reduced Models
-moments_matched = zeros(length(r_vals), 2);
-moment_diff_pr = zeros(length(r_vals), N);
-moment_diff_bt = zeros(length(r_vals), N);
-
-Gamma_err = zeros(length(r_vals), 2);
-mu_mse = zeros(length(r_vals), 2);
 
 % Looping over basis sizes
 for rr = 1:length(r_vals)
@@ -110,10 +118,6 @@ for rr = 1:length(r_vals)
     Lpr_pr = Wr'*L_pr;
     C_pr = C*Vr;
 
-    % Markov Parameter 
-    H_pr = markov_parameters(N, A_pr, Lpr_pr, (Gamma_ep^(-1/2))*C_pr);
-    [moments_matched(rr, 1), moment_diff_pr(rr, :)] = momentsMatched(H_pr, H);
-
     % Reduced forward model
     Gr = get_forward_model(A_pr, C_pr, dt, n);
     G_pr = Gr*Wr';
@@ -122,8 +126,8 @@ for rr = 1:length(r_vals)
     [mu_r_pos, Gamma_r_pos] = compute_posterior(Gamma_pr, G_pr, Gamma_obs, m);
 
     % Posterior Error
-    Gamma_err(rr, 1) = norm(Gamma_r_pos - Gamma_pos, 'fro') / norm(Gamma_pos, 'fro');
-    mu_mse(rr, 1) =  mean(sum((mu_pos-mu_r_pos) .^ 2));
+    Gamma_errs_PR_hsv(i, rr) = norm(Gamma_r_pos - Gamma_pos, 'fro') / norm(Gamma_pos, 'fro');
+    mu_errs_PR_hsv(i, rr) =  mean(sum((mu_pos-mu_r_pos) .^ 2));
 
     %% Balanced Truncation
     Tr = T(:, 1:r); 
@@ -134,10 +138,6 @@ for rr = 1:length(r_vals)
     Lpr_bt = Sr'*L_pr;
     C_bt = C*Tr;
 
-    % Markov Parameter 
-    H_bt = markov_parameters(N, A_bt, Lpr_bt, (Gamma_ep^(-1/2))*C_bt);
-    [moments_matched(rr, 2), moment_diff_bt(rr, :)] = momentsMatched(H_bt, H);
-
     % Reduced forward model
     Gr = get_forward_model(A_bt, C_bt, dt, n);
     G_bt = Gr*Sr';
@@ -146,120 +146,124 @@ for rr = 1:length(r_vals)
     [mu_r_pos, Gamma_r_pos] = compute_posterior(Gamma_pr, G_bt, Gamma_obs, m);
 
     % Posterior Error
-    Gamma_err(rr, 2) = norm(Gamma_r_pos - Gamma_pos, 'fro') / norm(Gamma_pos, 'fro');
-    mu_mse(rr, 2) =  mean(sum((mu_pos-mu_r_pos) .^ 2));
+    Gamma_errs_BT_hsv(i, rr) = norm(Gamma_r_pos - Gamma_pos, 'fro') / norm(Gamma_pos, 'fro');
+    mu_errs_BT_hsv(i, rr) =  mean(sum((mu_pos-mu_r_pos) .^ 2));
 end
-%%
-set(groot, 'DefaultAxesFontSize', 18)
+end
 
-% % Markov Parameter Matching
-% figure(3); clf(3)
-% subplot(2, 2, [1 2])
-% plot(r_vals, moments_matched(:, 2), "o-")
-% hold on
-% plot(r_vals, moments_matched(:, 1), "sq:")
-% plot(r_vals, floor(r_vals./d_out) + floor(r_vals./size(L_pr, 2)) + 1, "LineWidth", 0.5)
-% plot(r_vals, floor(r_vals./d_out) + 1, "LineWidth", 0.5)
-% ylabel('Moments Matched', 'Interpreter', 'latex')
-% xlabel('Reduced Dimension', 'Interpreter', 'latex')
-% title("Moments Matched tol $= 10^{-5}$", 'Interpreter', 'latex', 'fontsize', 20)
-% legend('balanced truncation', 'partial realization (2)', 'lower bound two-sided matching', 'lower bound left matching', 'Location', 'northwest','fontsize',18)
-% legend box off
-% xlim([min(r_vals), max(r_vals)])
-% pbaspect([16 4.5 1])
-% 
-% labels = [{'cut-off error'}, ...
-%     compose('r = %d', round(r_vals))];
-% 
-% idx = find(any(isnan(moment_diff_bt),1), 1, 'first');
-% if ~isempty(idx)
-%     moment_diff_bt = moment_diff_bt(:,1:idx-1);
-%     N = idx - 1;
-% end
-% 
-% subplot(2, 2,3)
-% imagesc([1e-5*ones(1, N); moment_diff_bt])
-% hold on
-% colorbar
-% set(gca, 'ColorScale', 'log')
-% colormap('pink')
-% clim([1e-6, 1])
-% yticks(1:length(labels))
-% yticklabels(labels)
-% xlabel('Leading Moments', 'Interpreter','latex')
-% title('Moment Relative Error; Balanced Truncation', 'Interpreter','latex', 'fontsize', 20)
-% 
-% 
-% idx = find(any(isnan(moment_diff_pr),1), 1, 'first');
-% 
-% pbaspect([16 9 1])
-% 
-% if ~isempty(idx)
-%     moment_diff_pr = moment_diff_pr(:,1:idx-1);
-%     N = idx - 1;
-% end
-% 
-% subplot(2, 2, 4)
-% imagesc([1e-5*ones(1, N); moment_diff_pr])
-% hold on
-% colorbar
-% set(gca, 'ColorScale', 'log')
-% colormap('pink')
-% clim([1e-6, 1])
-% yticks(1:length(labels))
-% yticklabels(labels)
-% xlabel('Leading Moments', 'Interpreter','latex')
-% title('Moment Relative Error; Partial Realization (2)', 'Interpreter','latex', 'fontsize', 20)
-% 
-% pbaspect([16 9 1])
+%% Plots
+legendStrings = [arrayfun(@(c) sprintf('$c/a = %d$', c), c, ...
+    'UniformOutput', false)];
 
-% posterior quantity errors
-Gamma_err(Gamma_err > 1e10) = nan;
-mu_mse(mu_mse > 1e10) = nan;
+Gamma_errs_PR_hsv(Gamma_errs_PR_hsv >  1e10) = nan;
+mu_errs_PR_hsv(mu_errs_PR_hsv >  1e10) = nan;
 
-% Separate Plot for just posteriors
-figure(15); clf(15)
-subplot(2, 1, 1)
-semilogy(r_vals, Gamma_err(:, 2), "o-") 
+
+% Normalized Hankel Singular Values
+figure(1); clf(1)
+semilogy(1:size(HSV, 2), HSV(1, :), "o")
 hold on
-semilogy(r_vals, Gamma_err(:, 1), "sq:")
-ylabel('Relative Frobenius Error', 'Interpreter', 'latex')
-xlabel('Reduced Dimension', 'Interpreter', 'latex')
-title("$\Gamma_{pos}$ Error", 'Interpreter', 'latex', 'fontsize', 20)
-legend('balanced truncation', 'partial realization (2)', 'Location', 'southwest','fontsize',18)
+semilogy(1:size(HSV, 2), HSV(2, :), "x")
+semilogy(1:size(HSV, 2), HSV(3, :), "sq")
+xlabel('Index ($i$)', 'Interpreter', 'latex','fontsize', 18)
+ylabel('$\delta_i$ - Normalized', 'Interpreter', 'latex','fontsize',18)
+title('Norm. Hankel Singular Values', 'Interpreter', 'latex', 'fontsize', 20)
+legend(legendStrings, 'Location', 'southwest' ,'fontsize', 18, 'Interpreter', 'latex')
+xlim([1, d])
+legend box off
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
+grid on
+
+figure(3); clf(3)
+subplot(2, 3, 1)
+semilogy(r_vals, Gamma_errs_BT_hsv(1, :), "o-") 
+hold on
+semilogy(r_vals, Gamma_errs_PR_hsv(1, :), "o:") 
+hold on
+ylabel('$\Gamma_{pos}$ - Rel. Frob. Error', 'Interpreter', 'latex','fontsize',18)
+title('Adv-Diff Ratio   $c/a = 1$', 'Interpreter', 'latex', 'fontsize', 20)
+legend('PD-BT', 'PD-PR', 'Location', 'southwest' ,'fontsize', 18, 'Interpreter', 'latex')
 legend box off
 xlim([min(r_vals), max(r_vals)])
-pbaspect([16 4.5 1])
-
-
-subplot(2, 1, 2)
-semilogy(r_vals, mu_mse(:, 2), "o-") 
-hold on
-semilogy(r_vals, mu_mse(:, 1), "sq:")
-ylabel('Relative Mean Square Error', 'Interpreter', 'latex')
-xlabel('Reduced Dimension', 'Interpreter', 'latex')
-title("$\mu_{pos}$ Error", 'Interpreter', 'latex', 'fontsize', 20)
-legend('balanced truncation', 'partial realization (2)', 'Location', 'southwest','fontsize',18)
-legend box off
-xlim([min(r_vals), max(r_vals)])
-ax = gca;
-ax.YScale = 'log';
-ytickformat('10^{%g}')
-pbaspect([16 4.5 1])
-
-% Hankel Singular Values
-figure(16); clf(16)
-ds = diag(D_bt);
-semilogy(ds, "o-")
-hold on
-xline(r_max, 'k-', 'Cutoff', 'LineWidth', 0.1);
-ylabel('Hankel Singular Values', 'Interpreter', 'latex')
-xlabel('index', 'Interpreter', 'latex')
-title('Hankel Singular Values', 'Interpreter', 'latex', 'fontsize', 20)
+grid on
+miny = min([min(min(Gamma_errs_PR_hsv)), min(min(Gamma_errs_BT_hsv))]);
+maxy = max([max(max(Gamma_errs_PR_hsv)), max(max(Gamma_errs_BT_hsv))]);
+ylim([miny, maxy])
 pbaspect([16 9 1])
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
+
+subplot(2, 3, 2)
+semilogy(r_vals, Gamma_errs_BT_hsv(2, :), "x-") 
+hold on
+semilogy(r_vals, Gamma_errs_PR_hsv(2, :), "x:") 
+hold on
+title('Adv-Diff Ratio   $c/a = 100$', 'Interpreter', 'latex', 'fontsize', 20)
+legend('PD-BT', 'PD-PR', 'Location', 'southwest'  ,'fontsize', 18, 'Interpreter', 'latex')
+legend box off
+xlim([min(r_vals), max(r_vals)])
+grid on
+ylim([miny, maxy])
+pbaspect([16 9 1])
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
+
+subplot(2, 3, 3)
+semilogy(r_vals, Gamma_errs_BT_hsv(3, :), "sq-") 
+hold on
+semilogy(r_vals, Gamma_errs_PR_hsv(3, :), "sq:") 
+hold on
+title('Adv-Diff Ratio   $c/a = 10000$', 'Interpreter', 'latex', 'fontsize', 20)
+legend('PD-BT', 'PD-PR', 'Location', 'southwest' ,'fontsize', 18, 'Interpreter', 'latex')
+legend box off
+xlim([min(r_vals), max(r_vals)])
+grid on
+ylim([miny, maxy])
+pbaspect([16 9 1])
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
+
+
+subplot(2, 3, 4)
+semilogy(r_vals, mu_errs_BT_hsv(1, :), "o-") 
+hold on
+semilogy(r_vals, mu_errs_PR_hsv(1, :), "o:") 
+hold on
+ylabel('$\mu_{pos}$ - Rel. MSE', 'Interpreter', 'latex','fontsize',18)
+legend('PD-BT', 'PD-PR', 'Location', 'southwest'  ,'fontsize', 18, 'Interpreter', 'latex')
+legend box off
+xlim([min(r_vals), max(r_vals)])
+grid on
+miny = min([min(min(mu_errs_PR_hsv)), min(min(mu_errs_BT_hsv))]);
+maxy = max([max(max(mu_errs_PR_hsv)), max(max(mu_errs_BT_hsv))]);
+ylim([miny, maxy])
+pbaspect([16 9 1])
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
+
+subplot(2, 3, 5)
+semilogy(r_vals, mu_errs_BT_hsv(2, :), "x-") 
+hold on
+semilogy(r_vals, mu_errs_PR_hsv(2, :), "x:") 
+hold on
+legend('PD-BT', 'PD-PR', 'Location', 'southwest' ,'fontsize', 18, 'Interpreter', 'latex')
+legend box off
+xlim([min(r_vals), max(r_vals)])
+grid on
+ylim([miny, maxy])
+pbaspect([16 9 1])
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
+
+subplot(2, 3, 6)
+semilogy(r_vals, mu_errs_BT_hsv(3, :), "sq-") 
+hold on
+semilogy(r_vals, mu_errs_PR_hsv(3, :), "sq:") 
+hold on
+legend('PD-BT', 'PD-PR', 'Location', 'southwest' ,'fontsize', 18, 'Interpreter', 'latex')
+legend box off
+xlim([min(r_vals), max(r_vals)])
+grid on
+ylim([miny, maxy])
+pbaspect([16 9 1])
+set(gca,'fontsize',16,'ticklabelinterpreter','latex')
 
 %% Functions
-
 function [A, C] = get_matrices(N, a, c)
 % 1D advection-diffusion finite difference on unit domain
 % N - spatial dimension
@@ -270,29 +274,6 @@ function [A, C] = get_matrices(N, a, c)
     A2 = diag(-1*ones(1, N-1), -1) + diag(ones(1, N-1), 1);
     A = (a / dx^2) * A1 - (c / (2*dx)) * A2;
     C = ones(1, N)./N;
-end
-
-% plot field
-function plot_field(A, p)
-    figure(1); clf(1)
-    dt = 0.001;
-    n = 1./dt;
-    t = dt*1:dt:dt*n;
-    d = size(A, 1);
-    x = linspace(0, 1, d+2);
-    x = x(2:end-1);
-    G = get_forward_model(A, eye(d), dt, n);
-    X = G*p;
-    X = reshape(X, [d, n]);
-    subplot(2, 1, 1)
-    mesh(t, x, X)
-    hold on
-    pbaspect([1, 1, 1])
-    xlabel('time')
-    ylabel('space')
-    title('1D Advection-Diffusion')
-    subplot(2, 1, 2)
-    imagesc(t, x, X)
 end
 
 function G = get_forward_model(A, C, dt, n)
@@ -309,47 +290,8 @@ function G = get_forward_model(A, C, dt, n)
 end
 
 function [mu_pos, Gamma_pos] = compute_posterior(Gamma_pr, G, Gamma_obs, m)
-% Computes posterior
+% Computes posterior quantities
     Gamma_pos = Gamma_pr - Gamma_pr * G' * ((Gamma_obs + G * Gamma_pr * G')\(G * Gamma_pr));
     mu_pos = Gamma_pos * G' * ((Gamma_obs) \ m);
-end
-
-function H = markov_parameters(N,A,B,C,D)
-% This computes the first N markov parameters
-H = cell(N,1);
-if nargin < 5
-    H{1} = zeros(size(C, 1), size(B, 2));
-else
-    H{1} = D;
-end
-
-Ak = eye(size(A, 1));
-
-for k = 2:N
-    H{k} = C * Ak * B;
-    Ak = Ak * A;
-end
-end
-
-function [num, moment_diff] = momentsMatched(Hr, H)
-% given the markov parameters of two systems, this function computes the
-% number of parameters matched with some tolerance 'ep' as well as the
-% relative error in 'moment_diff'
-ep = 1e-5;
-N = min([length(Hr), length(H)]);
-moment_match = false(1, N);
-moment_diff = zeros(1, N);
-for r = 1:N
-    if any(isnan(H{r}))
-        moment_diff(r) = nan;
-    elseif norm(H{r}) == 0 
-        moment_diff(r) = norm(Hr{r} - H{r});
-        moment_match(r) = moment_diff(r) < ep; % can be generalized for MIMO
-    else
-        moment_diff(r) = norm(Hr{r} - H{r})./norm(H{r});
-        moment_match(r) = moment_diff(r) < ep; % can be generalized for MIMO
-    end
-end
-num = sum(moment_match);
 end
 
