@@ -6,12 +6,10 @@ This Github repository contains code for the numerical experiments in the follow
 
 ## Background
 
-In the Bayseian inference approach (for linear models), model parameters $p \in ℝ^d$ are related to measurement data $m \in ℝ^{d_\text{obs}}$ through the following observation model:
+In the Bayesian inference approach (for linear models), model parameters $p \in ℝ^d$ are related to measurement data $m \in ℝ^{d_\text{obs}}$ through the following observation model:
 
 $$
-\begin{equation}
-\mathbf{m} = G p + \epsilon.
-\end{equation}
+m = G p + \epsilon.
 $$
 
 where $G \in ℝ^{d_\text{obs} \times d}$ is the forward model and $\epsilon \in ℝ^{d_\text{obs}}$ is observation noise.
